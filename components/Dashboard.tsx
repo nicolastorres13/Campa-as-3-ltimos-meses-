@@ -17,6 +17,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   const [influenceChannelFilter, setInfluenceChannelFilter] = useState<ChannelFilter>('all');
   const [subChannelFilter, setSubChannelFilter] = useState<ChannelFilter>('all');
   const [formatChannelFilter, setFormatChannelFilter] = useState<ChannelFilter>('all');
+  const [lineChannelFilter, setLineChannelFilter] = useState<ChannelFilter>('all');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
 
   const stats = useMemo(() => {
@@ -45,13 +46,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     };
   }, [data]);
 
-  // Lista única de campañas para el desplegable
   const campaignOptions = useMemo(() => {
     const names = Array.from(new Set(data.map(item => item.campaña)));
     return names.sort();
   }, [data]);
 
-  // Lógica para el componente de Ranking Top 10 con Filtro Desplegable
   const top10ByApertura = useMemo(() => {
     const filtered = selectedCampaign === 'all' 
       ? data 
@@ -59,17 +58,45 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
 
     return filtered
       .map(item => ({
-        name: item.nombre, // Usamos la columna nombre para las etiquetas
+        name: item.nombre, 
         apertura: Number(((item.abierto / item.entregado) * 100).toFixed(1)) || 0
       }))
       .sort((a, b) => b.apertura - a.apertura)
       .slice(0, 10);
   }, [data, selectedCampaign]);
 
-  // Lógica de Insights Estratégicos Detallados
+  // AJUSTE: Lógica refinada para Línea de Negocio
+  const lineOfBusinessData = useMemo(() => {
+    const filtered = lineChannelFilter === 'all' 
+      ? data 
+      : data.filter(item => item.canal.toLowerCase().includes(lineChannelFilter.toLowerCase()));
+
+    const groups: Record<string, { abiertos: number, entregados: number, matriculados: number }> = {};
+    
+    filtered.forEach(item => {
+      // Normalizamos el nombre de la línea para evitar duplicados por formato
+      const rawLine = item["línea de negocio"] || 'N/A';
+      const line = rawLine.trim().toUpperCase(); 
+      
+      if (!groups[line]) {
+        groups[line] = { abiertos: 0, entregados: 0, matriculados: 0 };
+      }
+      groups[line].abiertos += item.abierto;
+      groups[line].entregados += item.entregado;
+      groups[line].matriculados += item.matriculado;
+    });
+
+    return Object.entries(groups)
+      .map(([name, g]) => ({
+        name: name, // Nombre de la línea de negocio (e.g., POSGRADO, PREGRADO)
+        apertura: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
+        influencia: Number(((g.matriculados / g.abiertos) * 100).toFixed(2)) || 0
+      }))
+      .sort((a, b) => b.apertura - a.apertura);
+  }, [data, lineChannelFilter]);
+
   const insights = useMemo(() => {
     if (!data.length) return null;
-
     const channelMetrics = data.reduce((acc: any, curr) => {
       const channel = curr.canal.toLowerCase();
       if (!acc[channel]) acc[channel] = { abiertos: 0, entregados: 0, matriculados: 0, enviado: 0, avanzo: 0 };
@@ -80,13 +107,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       acc[channel].avanzo += curr.avanzo;
       return acc;
     }, {});
-
     const hsm = channelMetrics.hsm || { abiertos: 0, entregados: 0, matriculados: 0, enviado: 0, avanzo: 0 };
     const email = channelMetrics.email || { abiertos: 0, entregados: 0, matriculados: 0, enviado: 0, avanzo: 0 };
-
     const hsmInf = (hsm.matriculados / hsm.abiertos) * 100 || 0;
     const emailInf = (email.matriculados / email.abiertos) * 100 || 0;
-
     const conclusions = {
       canales: `Tras un análisis exhaustivo de la eficacia por canal, observamos que el canal ${hsmInf > emailInf ? 'HSM' : 'EMAIL'} presenta una tasa de influencia superior (${Math.max(hsmInf, emailInf).toFixed(2)}%), consolidándose como el vehículo con mayor capacidad de conversión real. Por el contrario, el canal ${hsmInf <= emailInf ? 'HSM' : 'EMAIL'} muestra una eficiencia relativa menor, lo que sugiere una necesidad inmediata de revisar la segmentación de audiencias o la personalización del mensaje en dicho canal para evitar el desgaste de la base de datos.`,
       funnel: `El comportamiento del funnel revela una tasa promedio de avance del ${stats.avgFunnelAdvance.toFixed(1)}%. Este KPI es crítico, ya que indica que una parte significativa de la audiencia interactúa inicialmente pero pierde el hilo conductor antes de la conversión final. Es imperativo fortalecer los llamados a la acción (CTA) y simplificar la experiencia de usuario post-apertura para reducir la fricción operativa detectada en las campañas de bajo rendimiento.`,
@@ -94,16 +118,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       suscripcion: `El volumen de cancelaciones detectado bajo la métrica de 'Suscripción' se concentra en campañas con asuntos de alta urgencia pero contenido de baja relevancia. Debemos mantener una frecuencia de envío moderada y eliminar definitivamente los disparadores que presentan una tasa de rebote superior al promedio, protegiendo así la reputación de los dominios de envío y la integridad de nuestra lista de contactos.`,
       influencia: `La tasa de influencia global del ${stats.avgInfluenceRate.toFixed(2)}% es el indicador definitivo del éxito de marketing en este periodo. Las campañas denominadas 'Estrellas' no solo superan este promedio, sino que demuestran una eficiencia excepcional en la conversión de leads fríos a matriculados activos. Estos casos de éxito deben ser analizados minuciosamente para replicar su estructura creativa y táctica en el próximo trimestre.`
     };
-
-    const sortedByInfluence = [...data].sort((a, b) => 
-      ((b.matriculado / b.abierto) || 0) - ((a.matriculado / a.abierto) || 0)
-    );
-
+    const sortedByInfluence = [...data].sort((a, b) => ((b.matriculado / b.abierto) || 0) - ((a.matriculado / a.abierto) || 0));
     return {
       topPerformers: sortedByInfluence.slice(0, 3),
-      bottomPerformers: [...data]
-        .sort((a, b) => (a.abierto / a.entregado) - (b.abierto / b.entregado))
-        .slice(0, 3),
+      bottomPerformers: [...data].sort((a, b) => (a.abierto / a.entregado) - (b.abierto / b.entregado)).slice(0, 3),
       conclusions,
       bestChannel: hsmInf > emailInf ? 'HSM' : 'EMAIL',
       bestChannelRate: Math.max(hsmInf, emailInf).toFixed(2)
@@ -241,32 +259,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* % INFLUENCIA POR CAMPAÑA */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <h3 className="text-lg font-bold text-slate-800">% Influencia por Campaña</h3>
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
-            <FilterButton active={influenceChannelFilter === 'all'} onClick={() => setInfluenceChannelFilter('all')} label="Todos" />
-            <FilterButton active={influenceChannelFilter === 'email'} onClick={() => setInfluenceChannelFilter('email')} label="Email" />
-            <FilterButton active={influenceChannelFilter === 'hsm'} onClick={() => setInfluenceChannelFilter('hsm')} label="HSM" />
-          </div>
-        </div>
-        <div className="h-[400px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={influenceProgressData} margin={{ top: 30, right: 30, left: 10, bottom: 20 }}>
-              <defs><linearGradient id="colorInfluence" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9}} angle={-45} textAnchor="end" height={80} interval={0} />
-              <YAxis axisLine={false} tickLine={false} unit="%" />
-              <Tooltip formatter={(val: number) => [`${val}%`, 'Influencia']} />
-              <Area type="monotone" dataKey="influencePerc" stroke="#2563eb" fillOpacity={1} fill="url(#colorInfluence)" dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}>
-                <LabelList dataKey="influencePerc" position="top" offset={10} formatter={(val: number) => `${val}%`} style={{ fontSize: '9px', fontWeight: 'bold', fill: '#1d4ed8' }} />
-              </Area>
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       {/* SUSCRIPCIÓN POR CAMPAÑA */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -331,7 +323,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* RANKING TOP 10 RE-DISEÑADO COMO AREA CHART (ESTÉTICA PERFORMANCE POR FORMATO) */}
+      {/* RANKING TOP 10 APERTURA POR CAMPAÑA */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
@@ -401,6 +393,88 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               </Area>
             </AreaChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* PERFORMANCE POR LÍNEA DE NEGOCIO (Ajustado para usar columna Línea de Negocio del Excel) */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Performance por Línea de Negocio: Apertura vs Influencia</h3>
+            <p className="text-sm text-slate-500">Métricas consolidadas desde la columna 'Línea de Negocio'</p>
+          </div>
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
+            <FilterButton active={lineChannelFilter === 'all'} onClick={() => setLineChannelFilter('all')} label="Todos" />
+            <FilterButton active={lineChannelFilter === 'email'} onClick={() => setLineChannelFilter('email')} label="Email" />
+            <FilterButton active={lineChannelFilter === 'hsm'} onClick={() => setLineChannelFilter('hsm')} label="HSM" />
+          </div>
+        </div>
+        <div className="h-[400px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={lineOfBusinessData} margin={{ top: 40, right: 30, left: 10, bottom: 60 }}>
+              <defs>
+                <linearGradient id="colorLineOpenAdj" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.7}/>
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                </linearGradient>
+                <linearGradient id="colorLineInfAdj" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.7}/>
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis 
+                dataKey="name" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{fontSize: 10, fontWeight: 700, fill: '#475569'}} 
+                angle={-45} 
+                textAnchor="end" 
+                interval={0} 
+                height={80} 
+                dy={10} 
+              />
+              <YAxis axisLine={false} tickLine={false} unit="%" domain={[0, 110]} hide />
+              <Tooltip 
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} 
+                formatter={(val: number, name: string) => [`${val}%`, name === 'apertura' ? 'Tasa de Apertura' : 'Tasa de Influencia']} 
+              />
+              <Area 
+                type="monotone" 
+                dataKey="apertura" 
+                name="apertura" 
+                stroke="#7c3aed" 
+                strokeWidth={3} 
+                fillOpacity={1} 
+                fill="url(#colorLineOpenAdj)" 
+                dot={{ r: 6, fill: '#7c3aed', strokeWidth: 2, stroke: '#fff' }}
+              >
+                <LabelList dataKey="apertura" position="top" offset={12} formatter={(val: number) => `${val}%`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#5b21b6' }} />
+              </Area>
+              <Area 
+                type="monotone" 
+                dataKey="influencia" 
+                name="influencia" 
+                stroke="#2563eb" 
+                strokeWidth={3} 
+                fillOpacity={1} 
+                fill="url(#colorLineInfAdj)" 
+                dot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+              >
+                <LabelList dataKey="influencia" position="top" offset={12} formatter={(val: number) => `${val}%`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#1d4ed8' }} />
+              </Area>
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-4 flex justify-center gap-6 text-xs font-bold uppercase tracking-wider text-slate-500">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
+            % Apertura
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-[#2563eb]"></div>
+            % Influencia
+          </div>
         </div>
       </div>
 
@@ -509,7 +583,7 @@ const StatCard = ({ title, value, subtitle, icon, color }: any) => {
   );
 };
 
-const IconEmail = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
+const IconEmail = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" /></svg>;
 const IconCheck = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 const IconEye = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
 const IconCursor = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" /></svg>;
