@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useRef } from 'react';
 import { CampaignData } from '../types';
 import { 
@@ -68,7 +67,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       .slice(0, 10);
   }, [data, selectedCampaign]);
 
-  // Ranking de Subjects (Asuntos) - Filtrable por campaña
   const subjectRankings = useMemo(() => {
     const filteredByCampaign = selectedSubjectCampaign === 'all' 
       ? data 
@@ -85,7 +83,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     });
 
     const allSubjects = Object.entries(groups)
-      .filter(([_, g]) => g.entregados >= 1) 
+      .filter(([_, g]) => g.entregados >= 100)
       .map(([name, g]) => ({
         fullName: name,
         apertura: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
@@ -97,6 +95,28 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
 
     return { top10, bottom10 };
   }, [data, selectedSubjectCampaign]);
+
+  const businessLineData = useMemo(() => {
+    const groups: Record<string, { enviado: number, entregado: number, abierto: number, clic: number, matriculado: number }> = {};
+    data.forEach(item => {
+      const line = item["línea de negocio"] || 'N/A';
+      if (!groups[line]) groups[line] = { enviado: 0, entregado: 0, abierto: 0, clic: 0, matriculado: 0 };
+      groups[line].enviado += item.enviado;
+      groups[line].entregado += item.entregado;
+      groups[line].abierto += item.abierto;
+      groups[line].clic += item["con clic"];
+      groups[line].matriculado += item.matriculado;
+    });
+
+    return Object.entries(groups).map(([name, g]) => ({
+      name,
+      entrega: (g.entregado / (g.enviado || 1)) * 100,
+      apertura: (g.abierto / (g.entregado || 1)) * 100,
+      clic: (g.clic / (g.entregado || 1)) * 100,
+      cto: (g.clic / (g.abierto || 1)) * 100,
+      influencia: (g.matriculado / (g.abierto || 1)) * 100
+    })).sort((a, b) => b.influencia - a.influencia);
+  }, [data]);
 
   const funnelProgressData = useMemo(() => {
     const filtered = funnelChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(funnelChannelFilter.toLowerCase()));
@@ -209,6 +229,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       const g = groups[canal];
       return {
         name: canal,
+        "Total Entregado": g.entregado,
         "Entrega %": Number(((g.entregado / (g.enviado || 1)) * 100).toFixed(1)) || 0,
         "Apertura %": Number(((g.abierto / (g.entregado || 1)) * 100).toFixed(1)) || 0,
         "Avance Funnel %": Number(((g.avanzo / (g.abierto || 1)) * 100).toFixed(1)) || 0
@@ -249,23 +270,39 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         <DownloadBtn onClick={() => downloadAsImage('section-stats', 'Resumen-Metricas')} />
       </div>
 
-      {/* EFICACIA POR CANAL */}
+      {/* EFICACIA POR CANAL - ACTUALIZADA CON TRANSPARENCIA Y VOLUMEN */}
       <div id="section-channel-efficiency" className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 w-full relative group/section">
         <div className="flex justify-between items-start mb-6">
-          <h3 className="text-lg font-bold text-slate-800">Eficacia por Canal</h3>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Eficacia por Canal</h3>
+            <p className="text-[10px] text-slate-500">Comparativa de tasas (%) vs Volumen total entregado.</p>
+          </div>
           <DownloadBtn onClick={() => downloadAsImage('section-channel-efficiency', 'Eficacia-Canal')} />
         </div>
         <div className="h-[300px] min-h-[280px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={channelData} barGap={12}>
+            <ComposedChart data={channelData} barGap={12} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 600}} dy={5} />
-              <YAxis axisLine={false} tickLine={false} hide />
-              <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-              <Bar dataKey="Entrega %" fill="#3b82f6" radius={[4, 4, 0, 0]}><LabelList dataKey="Entrega %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold' }} /></Bar>
-              <Bar dataKey="Apertura %" fill="#8b5cf6" radius={[4, 4, 0, 0]}><LabelList dataKey="Apertura %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold' }} /></Bar>
-              <Bar dataKey="Avance Funnel %" fill="#10b981" radius={[4, 4, 0, 0]}><LabelList dataKey="Avance Funnel %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold' }} /></Bar>
-            </BarChart>
+              <YAxis yAxisId="left" axisLine={false} tickLine={false} unit="%" domain={[0, 100]} tick={{fontSize: 10}} />
+              <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+              <Tooltip 
+                cursor={{fill: '#f8fafc'}} 
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+                formatter={(value: any, name: string) => [name.includes('Total') ? value.toLocaleString() : `${value}%`, name]}
+              />
+              <Legend verticalAlign="top" height={36} iconType="circle" />
+              <Bar yAxisId="left" dataKey="Entrega %" fill="rgba(59, 130, 246, 0.7)" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="Entrega %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#1e40af' }} />
+              </Bar>
+              <Bar yAxisId="left" dataKey="Apertura %" fill="rgba(139, 92, 246, 0.7)" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="Apertura %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#5b21b6' }} />
+              </Bar>
+              <Bar yAxisId="left" dataKey="Avance Funnel %" fill="rgba(16, 185, 129, 0.7)" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="Avance Funnel %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#065f46' }} />
+              </Bar>
+              <Line yAxisId="right" type="monotone" dataKey="Total Entregado" stroke="#64748b" strokeWidth={3} dot={{ r: 6, fill: '#64748b', strokeWidth: 2, stroke: '#fff' }} />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -442,12 +479,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* ANÁLISIS DE RENDIMIENTO POR ASUNTO (LISTA DE TEXTO) */}
+      {/* ANÁLISIS DE RENDIMIENTO POR ASUNTO */}
       <div id="section-subjects-analysis" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full relative group/section">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6">
           <div>
             <h3 className="text-xl font-extrabold text-slate-800">Rendimiento por Asunto</h3>
-            <p className="text-xs text-slate-500">Comparativa de efectividad directa por texto de asunto.</p>
+            <p className="text-xs text-slate-500">Comparativa de efectividad directa por texto de asunto (Mín. 100 entregados).</p>
           </div>
           <div className="flex items-center gap-3 w-full md:w-auto">
             <div className="flex items-center gap-2">
@@ -466,7 +503,6 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          {/* TOP 10 MEJORES ASUNTOS */}
           <div className="space-y-4">
             <h4 className="text-sm font-black text-emerald-600 flex items-center gap-2 uppercase tracking-tighter">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -484,11 +520,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
                     <span className="text-sm font-black text-emerald-600 font-mono">{item.apertura}%</span>
                   </div>
                 </div>
-              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes.</p>}
+              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes con más de 100 entregados.</p>}
             </div>
           </div>
 
-          {/* TOP 10 PEORES ASUNTOS */}
           <div className="space-y-4">
             <h4 className="text-sm font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter">
               <span className="w-2 h-2 rounded-full bg-red-500"></span>
@@ -506,7 +541,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
                     <span className="text-sm font-black text-red-600 font-mono">{item.apertura}%</span>
                   </div>
                 </div>
-              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes.</p>}
+              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes con más de 100 entregados.</p>}
             </div>
           </div>
         </div>
@@ -565,6 +600,51 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* RENDIMIENTO POR LÍNEA DE NEGOCIO */}
+      <div id="section-business-line" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full relative group/section">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-800">Rendimiento por Línea de Negocio</h3>
+            <p className="text-xs text-slate-500">Métricas agregadas por categoría de negocio detectada.</p>
+          </div>
+          <DownloadBtn onClick={() => downloadAsImage('section-business-line', 'Rendimiento-Línea-Negocio')} visible />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {businessLineData.map((item, idx) => (
+            <div key={idx} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 hover:border-blue-300 hover:shadow-lg transition-all">
+              <div className="mb-4 pb-2 border-b border-slate-200 flex justify-between items-center">
+                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">{item.name}</h4>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[9px] font-black rounded-md uppercase">Línea</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Entrega</p>
+                  <p className="text-lg font-black text-slate-900 font-mono">{item.entrega.toFixed(1)}%</p>
+                </div>
+                <div className="space-y-1 text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Apertura</p>
+                  <p className="text-lg font-black text-purple-600 font-mono">{item.apertura.toFixed(1)}%</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">Clic</p>
+                  <p className="text-lg font-black text-slate-900 font-mono">{item.clic.toFixed(1)}%</p>
+                </div>
+                <div className="space-y-1 text-right">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">CTO</p>
+                  <p className="text-lg font-black text-amber-600 font-mono">{item.cto.toFixed(1)}%</p>
+                </div>
+                <div className="col-span-2 mt-2 pt-3 border-t border-slate-200">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-black text-blue-600 uppercase">Influencia Directa</p>
+                    <p className="text-xl font-black text-blue-700 font-mono">{item.influencia.toFixed(2)}%</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
