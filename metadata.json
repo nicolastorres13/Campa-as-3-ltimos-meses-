@@ -1,0 +1,5 @@
+{
+  "name": "Campaign Analysis Dashboard",
+  "description": "Un dashboard profesional para analizar métricas de campañas de marketing desde archivos Excel, visualizando el funnel de conversión, matriculados y efectividad de entrega.",
+  "requestFramePermissions": []
+}
