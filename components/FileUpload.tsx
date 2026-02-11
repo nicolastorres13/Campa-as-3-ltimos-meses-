@@ -39,18 +39,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
 
           const campName = row.campaña || row.Campaña || row.Campaign || 'Sin ID';
           const displayName = row.nombre || row.Nombre || campName;
-          
-          // Mapeo robusto para Línea de Negocio
-          const bizLine = 
-            row["línea de negocio"] || 
-            row["Línea de negocio"] || 
-            row["linea de negocio"] || 
-            row["Linea de negocio"] || 
-            row["Línea de Negocio"] || 
-            row["Linea de Negocio"] || 
-            row["línea"] || 
-            row["linea"] || 
-            'N/A';
 
           return {
             campaña: campName,
@@ -68,7 +56,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
             "tipo de suscripción": String(row["tipo de suscripción"] || row["Tipo de suscripción"] || 'N/A'),
             asunto: String(row.asunto || row.Asunto || 'N/A'),
             estado: String(row.estado || row.Estado || 'N/A'),
-            "línea de negocio": String(bizLine).trim(),
+            "línea de negocio": String(row["línea de negocio"] || row["Línea de negocio"] || 'N/A'),
             canal: String(row.canal || row.Canal || 'N/A'),
             formato: String(row.formato || row.Formato || 'N/A'),
           };
@@ -94,7 +82,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
           <p className="mb-2 text-sm text-slate-700">
             <span className="font-semibold">Haz clic para subir el Excel</span>
           </p>
-          <p className="text-xs text-slate-500 text-center px-4">Columnas: nombre, campaña, línea de negocio, matriculado, avanzo, enviado, entregado, abierto, suscripción, estado, formato, canal...</p>
+          <p className="text-xs text-slate-500 text-center px-4">Columnas: nombre, campaña, matriculado, avanzo, enviado, entregado, abierto, suscripción, estado, formato, canal...</p>
         </div>
         <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleFileChange} />
       </label>
