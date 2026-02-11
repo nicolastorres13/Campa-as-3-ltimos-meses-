@@ -26,7 +26,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
         const rawData = XLSX.utils.sheet_to_json(ws);
 
         const mappedData: CampaignData[] = rawData.map((row: any) => {
-          // Priorizamos "suscripción" como fuente primaria de datos
           const unsubsValue = 
             row["suscripción"] || 
             row["suscripcion"] || 
@@ -38,8 +37,12 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
             row["cancelada"] || 
             0;
 
+          const campName = row.campaña || row.Campaña || row.Campaign || 'Sin ID';
+          const displayName = row.nombre || row.Nombre || campName;
+
           return {
-            campaña: row.campaña || row.Campaña || row.Campaign || 'Sin Nombre',
+            campaña: campName,
+            nombre: displayName,
             matriculado: Number(row.matriculado || row.Matriculado || 0),
             avanzo: Number(row.avanzo || row.Avanzo || 0),
             enviado: Number(row.enviado || row.Enviado || 0),
@@ -79,7 +82,7 @@ const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading }) => 
           <p className="mb-2 text-sm text-slate-700">
             <span className="font-semibold">Haz clic para subir el Excel</span>
           </p>
-          <p className="text-xs text-slate-500 text-center px-4">Columnas: campaña, matriculado, avanzo, enviado, entregado, abierto, suscripción, estado, formato, canal...</p>
+          <p className="text-xs text-slate-500 text-center px-4">Columnas: nombre, campaña, matriculado, avanzo, enviado, entregado, abierto, suscripción, estado, formato, canal...</p>
         </div>
         <input type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleFileChange} />
       </label>

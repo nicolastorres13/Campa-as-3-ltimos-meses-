@@ -17,6 +17,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   const [influenceChannelFilter, setInfluenceChannelFilter] = useState<ChannelFilter>('all');
   const [subChannelFilter, setSubChannelFilter] = useState<ChannelFilter>('all');
   const [formatChannelFilter, setFormatChannelFilter] = useState<ChannelFilter>('all');
+  const [selectedCampaign, setSelectedCampaign] = useState('all');
 
   const stats = useMemo(() => {
     const s = data.reduce((acc, curr) => ({
@@ -44,11 +45,31 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     };
   }, [data]);
 
+  // Lista única de campañas para el desplegable
+  const campaignOptions = useMemo(() => {
+    const names = Array.from(new Set(data.map(item => item.campaña)));
+    return names.sort();
+  }, [data]);
+
+  // Lógica para el componente de Ranking Top 10 con Filtro Desplegable
+  const top10ByApertura = useMemo(() => {
+    const filtered = selectedCampaign === 'all' 
+      ? data 
+      : data.filter(item => item.campaña === selectedCampaign);
+
+    return filtered
+      .map(item => ({
+        name: item.nombre, // Usamos la columna nombre para las etiquetas
+        apertura: Number(((item.abierto / item.entregado) * 100).toFixed(1)) || 0
+      }))
+      .sort((a, b) => b.apertura - a.apertura)
+      .slice(0, 10);
+  }, [data, selectedCampaign]);
+
   // Lógica de Insights Estratégicos Detallados
   const insights = useMemo(() => {
     if (!data.length) return null;
 
-    // 1. Análisis de Canal Ponderado
     const channelMetrics = data.reduce((acc: any, curr) => {
       const channel = curr.canal.toLowerCase();
       if (!acc[channel]) acc[channel] = { abiertos: 0, entregados: 0, matriculados: 0, enviado: 0, avanzo: 0 };
@@ -66,16 +87,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
     const hsmInf = (hsm.matriculados / hsm.abiertos) * 100 || 0;
     const emailInf = (email.matriculados / email.abiertos) * 100 || 0;
 
-    // 2. Conclusiones Largas para Presentaciones
     const conclusions = {
       canales: `Tras un análisis exhaustivo de la eficacia por canal, observamos que el canal ${hsmInf > emailInf ? 'HSM' : 'EMAIL'} presenta una tasa de influencia superior (${Math.max(hsmInf, emailInf).toFixed(2)}%), consolidándose como el vehículo con mayor capacidad de conversión real. Por el contrario, el canal ${hsmInf <= emailInf ? 'HSM' : 'EMAIL'} muestra una eficiencia relativa menor, lo que sugiere una necesidad inmediata de revisar la segmentación de audiencias o la personalización del mensaje en dicho canal para evitar el desgaste de la base de datos.`,
-      
       funnel: `El comportamiento del funnel revela una tasa promedio de avance del ${stats.avgFunnelAdvance.toFixed(1)}%. Este KPI es crítico, ya que indica que una parte significativa de la audiencia interactúa inicialmente pero pierde el hilo conductor antes de la conversión final. Es imperativo fortalecer los llamados a la acción (CTA) y simplificar la experiencia de usuario post-apertura para reducir la fricción operativa detectada en las campañas de bajo rendimiento.`,
-      
       formatos: `La comparativa de performance por formato demuestra que no existe una correlación lineal directa entre una alta tasa de apertura y una alta tasa de influencia. Se han identificado formatos que logran captar la atención visual (Apertura) pero fallan en la persuasión de matriculación. Recomendamos priorizar los formatos con 'doble impacto' que mantienen la coherencia narrativa, ya que estos optimizan el ROI publicitario al asegurar que el tráfico generado sea de alta intención.`,
-      
       suscripcion: `El volumen de cancelaciones detectado bajo la métrica de 'Suscripción' se concentra en campañas con asuntos de alta urgencia pero contenido de baja relevancia. Debemos mantener una frecuencia de envío moderada y eliminar definitivamente los disparadores que presentan una tasa de rebote superior al promedio, protegiendo así la reputación de los dominios de envío y la integridad de nuestra lista de contactos.`,
-      
       influencia: `La tasa de influencia global del ${stats.avgInfluenceRate.toFixed(2)}% es el indicador definitivo del éxito de marketing en este periodo. Las campañas denominadas 'Estrellas' no solo superan este promedio, sino que demuestran una eficiencia excepcional en la conversión de leads fríos a matriculados activos. Estos casos de éxito deben ser analizados minuciosamente para replicar su estructura creativa y táctica en el próximo trimestre.`
     };
 
@@ -95,10 +111,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   }, [data, stats]);
 
   const funnelProgressData = useMemo(() => {
-    const filtered = funnelChannelFilter === 'all' 
-      ? data 
-      : data.filter(item => item.canal.toLowerCase().includes(funnelChannelFilter.toLowerCase()));
-
+    const filtered = funnelChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(funnelChannelFilter.toLowerCase()));
     const groups: Record<string, { avanzo: number, abierto: number }> = {};
     filtered.forEach(item => {
       const camp = item.campaña || 'Sin Nombre';
@@ -106,20 +119,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       groups[camp].avanzo += item.avanzo;
       groups[camp].abierto += item.abierto;
     });
-
-    return Object.entries(groups)
-      .map(([name, g]) => ({
-        name,
-        avanzoPerc: Number(((g.avanzo / g.abierto) * 100).toFixed(1)) || 0
-      }))
-      .sort((a, b) => b.avanzoPerc - a.avanzoPerc);
+    return Object.entries(groups).map(([name, g]) => ({ name, avanzoPerc: Number(((g.avanzo / g.abierto) * 100).toFixed(1)) || 0 })).sort((a, b) => b.avanzoPerc - a.avanzoPerc);
   }, [data, funnelChannelFilter]);
 
   const influenceProgressData = useMemo(() => {
-    const filtered = influenceChannelFilter === 'all' 
-      ? data 
-      : data.filter(item => item.canal.toLowerCase().includes(influenceChannelFilter.toLowerCase()));
-
+    const filtered = influenceChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(influenceChannelFilter.toLowerCase()));
     const groups: Record<string, { matriculado: number, abierto: number }> = {};
     filtered.forEach(item => {
       const camp = item.campaña || 'Sin Nombre';
@@ -127,40 +131,22 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       groups[camp].matriculado += item.matriculado;
       groups[camp].abierto += item.abierto;
     });
-
-    return Object.entries(groups)
-      .map(([name, g]) => ({
-        name,
-        influencePerc: Number(((g.matriculado / g.abierto) * 100).toFixed(2)) || 0
-      }))
-      .sort((a, b) => b.influencePerc - a.influencePerc);
+    return Object.entries(groups).map(([name, g]) => ({ name, influencePerc: Number(((g.matriculado / g.abierto) * 100).toFixed(2)) || 0 })).sort((a, b) => b.influencePerc - a.influencePerc);
   }, [data, influenceChannelFilter]);
 
   const subscriptionProgressData = useMemo(() => {
-    const filtered = subChannelFilter === 'all' 
-      ? data 
-      : data.filter(item => item.canal.toLowerCase().includes(subChannelFilter.toLowerCase()));
-
+    const filtered = subChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(subChannelFilter.toLowerCase()));
     const groups: Record<string, { subs: number }> = {};
     filtered.forEach(item => {
       const camp = item.campaña || 'Sin Nombre';
       if (!groups[camp]) groups[camp] = { subs: 0 };
       groups[camp].subs += item["suscripción cancelada"];
     });
-
-    return Object.entries(groups)
-      .map(([name, g]) => ({
-        name,
-        subs: g.subs
-      }))
-      .sort((a, b) => b.subs - a.subs);
+    return Object.entries(groups).map(([name, g]) => ({ name, subs: g.subs })).sort((a, b) => b.subs - a.subs);
   }, [data, subChannelFilter]);
 
   const openRateByFormatData = useMemo(() => {
-    const filtered = formatChannelFilter === 'all' 
-      ? data 
-      : data.filter(item => item.canal.toLowerCase().includes(formatChannelFilter.toLowerCase()));
-
+    const filtered = formatChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(formatChannelFilter.toLowerCase()));
     const groups: Record<string, { abiertos: number, entregados: number, matriculados: number }> = {};
     filtered.forEach(item => {
       const fmt = item.formato?.toLowerCase().trim() || 'n/a';
@@ -169,38 +155,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       groups[fmt].entregados += item.entregado;
       groups[fmt].matriculados += item.matriculado;
     });
-
-    return Object.entries(groups)
-      .map(([name, g]) => ({
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        openRate: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
-        influenceRate: Number(((g.matriculados / g.abiertos) * 100).toFixed(2)) || 0
-      }))
-      .sort((a, b) => b.openRate - a.openRate);
+    return Object.entries(groups).map(([name, g]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      openRate: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
+      influenceRate: Number(((g.matriculados / g.abiertos) * 100).toFixed(2)) || 0
+    })).sort((a, b) => b.openRate - a.openRate);
   }, [data, formatChannelFilter]);
-
-  const openRateByStatusData = useMemo(() => {
-    const groups: Record<string, { abiertos: number, entregados: number, mejorCamp: string, mejorTasa: number }> = {};
-    data.forEach(item => {
-      const estado = item.estado || 'Sin Estado';
-      if (!groups[estado]) groups[estado] = { abiertos: 0, entregados: 0, mejorCamp: '', mejorTasa: -1 };
-      groups[estado].abiertos += item.abierto;
-      groups[estado].entregados += item.entregado;
-      const tasaCamp = (item.abierto / item.entregado) * 100 || 0;
-      if (tasaCamp > groups[estado].mejorTasa) {
-        groups[estado].mejorTasa = tasaCamp;
-        groups[estado].mejorCamp = item.campaña;
-      }
-    });
-    return Object.entries(groups)
-      .map(([name, g]) => ({
-        name,
-        openRate: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
-        mejorCamp: g.mejorCamp,
-        mejorTasa: Number(g.mejorTasa.toFixed(1))
-      }))
-      .sort((a, b) => b.openRate - a.openRate);
-  }, [data]);
 
   const channelData = useMemo(() => {
     const groups: Record<string, { enviado: number, entregado: number, abierto: number, avanzo: number }> = {};
@@ -225,7 +185,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-12 w-full overflow-hidden text-slate-900">
-      {/* VISTA GENERAL - 8 MÉTRICAS PRINCIPALES */}
+      {/* VISTA GENERAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         <StatCard title="Enviado" value={stats.totalSent.toLocaleString()} icon={<IconEmail />} color="blue" />
         <StatCard title="Entregado" value={stats.totalDelivered.toLocaleString()} subtitle={`${stats.avgDeliveryRate.toFixed(1)}% de éxito`} icon={<IconCheck />} color="blue" />
@@ -238,14 +198,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       </div>
 
       {/* EFICACIA POR CANAL */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <h3 className="text-xl font-bold text-slate-800 mb-8">Eficacia Ponderada por Canal</h3>
         <div className="h-[400px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={channelData} barGap={12}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 600}} dy={5} />
-              <YAxis axisLine={false} tickLine={false} unit="%" hide />
+              <YAxis axisLine={false} tickLine={false} hide />
               <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
               <Bar dataKey="Entrega %" fill="#3b82f6" radius={[4, 4, 0, 0]}><LabelList dataKey="Entrega %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold' }} /></Bar>
               <Bar dataKey="Apertura %" fill="#8b5cf6" radius={[4, 4, 0, 0]}><LabelList dataKey="Apertura %" position="top" formatter={(val: any) => `${val}%`} style={{ fontSize: '10px', fontWeight: 'bold' }} /></Bar>
@@ -256,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       </div>
 
       {/* % AVANCE EN FUNNEL POR CAMPAÑA */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <h3 className="text-lg font-bold text-slate-800">% Avance en Funnel por Campaña</h3>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
@@ -271,7 +231,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <defs><linearGradient id="colorAvanzo" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9}} angle={-45} textAnchor="end" height={80} interval={0} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} unit="%" />
+              <YAxis axisLine={false} tickLine={false} unit="%" />
               <Tooltip formatter={(val: number) => [`${val}%`, 'Avance']} />
               <Area type="monotone" dataKey="avanzoPerc" stroke="#059669" fillOpacity={1} fill="url(#colorAvanzo)" dot={{ r: 4, fill: '#059669', strokeWidth: 2, stroke: '#fff' }}>
                 <LabelList dataKey="avanzoPerc" position="top" offset={10} formatter={(val: number) => `${val}%`} style={{ fontSize: '9px', fontWeight: 'bold', fill: '#047857' }} />
@@ -282,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       </div>
 
       {/* % INFLUENCIA POR CAMPAÑA */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <h3 className="text-lg font-bold text-slate-800">% Influencia por Campaña</h3>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
@@ -297,7 +257,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <defs><linearGradient id="colorInfluence" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient></defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9}} angle={-45} textAnchor="end" height={80} interval={0} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} unit="%" />
+              <YAxis axisLine={false} tickLine={false} unit="%" />
               <Tooltip formatter={(val: number) => [`${val}%`, 'Influencia']} />
               <Area type="monotone" dataKey="influencePerc" stroke="#2563eb" fillOpacity={1} fill="url(#colorInfluence)" dot={{ r: 4, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}>
                 <LabelList dataKey="influencePerc" position="top" offset={10} formatter={(val: number) => `${val}%`} style={{ fontSize: '9px', fontWeight: 'bold', fill: '#1d4ed8' }} />
@@ -308,11 +268,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       </div>
 
       {/* SUSCRIPCIÓN POR CAMPAÑA */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">Suscripción por Campaña</h3>
-            <p className="text-sm text-slate-500">Métrica basada en la columna 'suscripción' del archivo</p>
+            <p className="text-sm text-slate-500">Métrica basada en la columna 'suscripción'</p>
           </div>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
             <FilterButton active={subChannelFilter === 'all'} onClick={() => setSubChannelFilter('all')} label="Todos" />
@@ -326,7 +286,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <defs><linearGradient id="colorSub" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient></defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 9}} angle={-45} textAnchor="end" height={80} interval={0} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} />
+              <YAxis axisLine={false} tickLine={false} />
               <Tooltip formatter={(val: number) => [val, 'Suscripción']} />
               <Area type="monotone" dataKey="subs" stroke="#dc2626" fillOpacity={1} fill="url(#colorSub)" dot={{ r: 4, fill: '#dc2626', strokeWidth: 2, stroke: '#fff' }}>
                 <LabelList dataKey="subs" position="top" offset={10} style={{ fontSize: '10px', fontWeight: 'bold', fill: '#991b1b' }} />
@@ -336,12 +296,12 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* % APERTURA E INFLUENCIA POR FORMATO (DISEÑO COMBINADO) */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full overflow-hidden">
+      {/* PERFORMANCE POR FORMATO */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
             <h3 className="text-lg font-bold text-slate-800">Performance por Formato: Apertura vs Influencia</h3>
-            <p className="text-sm text-slate-500">Comparativa ponderada para identificar el formato más eficaz (Texto, Imagen, Carrusel)</p>
+            <p className="text-sm text-slate-500">Comparativa ponderada por formato (Texto, Imagen, Carrusel)</p>
           </div>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl gap-1 shrink-0">
             <FilterButton active={formatChannelFilter === 'all'} onClick={() => setFormatChannelFilter('all')} label="Todos" />
@@ -353,64 +313,100 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={openRateByFormatData} margin={{ top: 40, right: 30, left: 10, bottom: 20 }}>
               <defs>
-                <linearGradient id="colorFormatOpen" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.7}/>
-                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorFormatInf" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.7}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                </linearGradient>
+                <linearGradient id="colorFormatOpen" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.7}/><stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/></linearGradient>
+                <linearGradient id="colorFormatInf" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.7}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: '#64748b'}} dy={10} />
-              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} unit="%" />
-              <Tooltip 
-                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
-                formatter={(val: number, name: string) => [`${val}%`, name === 'openRate' ? 'Tasa de Apertura' : 'Tasa de Influencia']}
-              />
-              <Area 
-                type="monotone" 
-                dataKey="openRate" 
-                name="openRate"
-                stroke="#7c3aed" 
-                strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorFormatOpen)" 
-                dot={{ r: 6, fill: '#7c3aed', strokeWidth: 2, stroke: '#fff' }}
-              >
+              <YAxis axisLine={false} tickLine={false} unit="%" />
+              <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} formatter={(val: number, name: string) => [`${val}%`, name === 'openRate' ? 'Tasa de Apertura' : 'Tasa de Influencia']} />
+              <Area type="monotone" dataKey="openRate" name="openRate" stroke="#7c3aed" strokeWidth={3} fillOpacity={1} fill="url(#colorFormatOpen)" dot={{ r: 6, fill: '#7c3aed', strokeWidth: 2, stroke: '#fff' }}>
                 <LabelList dataKey="openRate" position="top" offset={12} formatter={(val: number) => `${val}%`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#5b21b6' }} />
               </Area>
-              <Area 
-                type="monotone" 
-                dataKey="influenceRate" 
-                name="influenceRate"
-                stroke="#2563eb" 
-                strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorFormatInf)" 
-                dot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
-              >
+              <Area type="monotone" dataKey="influenceRate" name="influenceRate" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorFormatInf)" dot={{ r: 6, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}>
                 <LabelList dataKey="influenceRate" position="top" offset={12} formatter={(val: number) => `${val}%`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#1d4ed8' }} />
               </Area>
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        <div className="mt-4 flex justify-center gap-6 text-xs font-bold uppercase tracking-wider text-slate-500">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#7c3aed]"></div>
-            % Apertura
+      </div>
+
+      {/* RANKING TOP 10 RE-DISEÑADO COMO AREA CHART (ESTÉTICA PERFORMANCE POR FORMATO) */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">Ranking: Top 10 Apertura por Campaña</h3>
+            <p className="text-sm text-slate-500">Visualización detallada por nombre de campaña</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-[#2563eb]"></div>
-            % Influencia
+          <div className="relative w-full md:w-72">
+            <select 
+              className="w-full px-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all appearance-none cursor-pointer font-medium text-slate-700"
+              value={selectedCampaign}
+              onChange={(e) => setSelectedCampaign(e.target.value)}
+            >
+              <option value="all">Ver todas las campañas</option>
+              {campaignOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+            </div>
           </div>
+        </div>
+        <div className="h-[400px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={top10ByApertura} margin={{ top: 40, right: 30, left: 10, bottom: 60 }}>
+              <defs>
+                <linearGradient id="colorRankingOpen" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.7}/>
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis 
+                dataKey="name" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{fontSize: 9, fontWeight: 500, fill: '#64748b'}} 
+                angle={-45} 
+                textAnchor="end" 
+                interval={0} 
+                height={80} 
+                dy={10}
+              />
+              <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} unit="%" domain={[0, 110]} hide />
+              <Tooltip 
+                cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '4 4' }}
+                contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} 
+                formatter={(val: number) => [`${val}%`, 'Tasa de Apertura']} 
+              />
+              <Area 
+                type="monotone" 
+                dataKey="apertura" 
+                stroke="#7c3aed" 
+                strokeWidth={3} 
+                fillOpacity={1} 
+                fill="url(#colorRankingOpen)" 
+                dot={{ r: 6, fill: '#7c3aed', strokeWidth: 2, stroke: '#fff' }}
+                activeDot={{ r: 8, strokeWidth: 0 }}
+              >
+                <LabelList 
+                  dataKey="apertura" 
+                  position="top" 
+                  offset={15}
+                  formatter={(val: number) => `${val}%`} 
+                  style={{ fontSize: '11px', fontWeight: 'bold', fill: '#5b21b6' }} 
+                />
+              </Area>
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* REPORTE ESTRATÉGICO FINAL CON CONCLUSIONES DETALLADAS */}
+      {/* REPORTE ESTRATÉGICO FINAL */}
       {insights && (
-        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border border-slate-800 w-full overflow-hidden mt-12 animate-in slide-in-from-bottom duration-700">
+        <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl border border-slate-800 w-full mt-12 animate-in slide-in-from-bottom duration-700">
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
             <div>
               <h2 className="text-3xl font-extrabold tracking-tight mb-2">Análisis Estratégico & Conclusiones Ejecutivo</h2>
@@ -422,63 +418,20 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <p className="text-xs font-medium text-blue-300">Influencia: {insights.bestChannelRate}%</p>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 gap-6">
-            {/* Análisis por Componente: Texto Extenso */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <ReportBlock 
-                title="Eficacia de Canales (Weighted Analysis)" 
-                content={insights.conclusions.canales} 
-                icon={<IconZap />} 
-              />
-              <ReportBlock 
-                title="Diagnóstico de Avance Funnel" 
-                content={insights.conclusions.funnel} 
-                icon={<IconTrend />} 
-              />
-              <ReportBlock 
-                title="Evaluación de Formatos Creativos" 
-                content={insights.conclusions.formatos} 
-                icon={<IconEye />} 
-              />
-              <ReportBlock 
-                title="Salud de Base de Datos y Churn" 
-                content={insights.conclusions.suscripcion} 
-                icon={<IconX />} 
-              />
-            </div>
-
-            {/* Gran Conclusión Final */}
-            <div className="bg-gradient-to-br from-blue-900/40 to-slate-800/40 p-8 rounded-2xl border border-blue-500/20">
-              <h3 className="text-xl font-black text-blue-400 mb-4 flex items-center gap-2">
-                <IconCheck /> CONCLUSIÓN GENERAL DE INFLUENCIA (ROI)
-              </h3>
-              <p className="text-slate-200 text-sm leading-relaxed font-medium">
-                {insights.conclusions.influencia}
-              </p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <ReportBlock title="Eficacia de Canales (Weighted Analysis)" content={insights.conclusions.canales} icon={<IconZap />} />
+            <ReportBlock title="Diagnóstico de Avance Funnel" content={insights.conclusions.funnel} icon={<IconTrend />} />
+            <ReportBlock title="Evaluación de Formatos Creativos" content={insights.conclusions.formatos} icon={<IconEye />} />
+            <ReportBlock title="Salud de Base de Datos y Churn" content={insights.conclusions.suscripcion} icon={<IconX />} />
           </div>
-
-          {/* Quick Actions Matrix */}
+          <div className="bg-gradient-to-br from-blue-900/40 to-slate-800/40 p-8 rounded-2xl border border-blue-500/20 mt-6">
+            <h3 className="text-xl font-black text-blue-400 mb-4 flex items-center gap-2"><IconCheck /> CONCLUSIÓN GENERAL DE INFLUENCIA (ROI)</h3>
+            <p className="text-slate-200 text-sm leading-relaxed font-medium">{insights.conclusions.influencia}</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            <ActionItem 
-              type="KEEP" 
-              title="Escalar Modelos Éxito" 
-              desc={`Mantener el canal ${insights.bestChannel} y el formato ${openRateByFormatData[0]?.name || 'líder'} como eje central de la estrategia.`}
-              color="emerald"
-            />
-            <ActionItem 
-              type="IMPROVE" 
-              title="Ajuste de Narrativa" 
-              desc="Rediseñar los CTA en campañas de baja influencia para mejorar la transición entre apertura y matriculación."
-              color="amber"
-            />
-            <ActionItem 
-              type="REMOVE" 
-              title="Higiene de Lista" 
-              desc="Eliminar disparadores de baja apertura para optimizar costos de envío y salud de la reputación de remitente."
-              color="red"
-            />
+            <ActionItem type="KEEP" title="Escalar Modelos Éxito" desc={`Mantener el canal ${insights.bestChannel} y el formato ${openRateByFormatData[0]?.name || 'líder'} como eje.`} color="emerald" />
+            <ActionItem type="IMPROVE" title="Ajuste de Narrativa" desc="Rediseñar CTA en campañas de baja influencia para mejorar transición a matriculación." color="amber" />
+            <ActionItem type="REMOVE" title="Higiene de Lista" desc="Eliminar disparadores de baja apertura para optimizar reputación de remitente." color="red" />
           </div>
         </div>
       )}
@@ -494,17 +447,15 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
                 <th className="px-4 py-3 text-right font-bold text-slate-500 uppercase">% Apertura</th>
                 <th className="px-4 py-3 text-right font-bold text-slate-500 uppercase">% Avance</th>
                 <th className="px-4 py-3 text-right font-bold text-slate-500 uppercase">% Influencia</th>
-                <th className="px-4 py-3 text-right font-bold text-slate-500 uppercase">Suscripción</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
               {data.map((item, idx) => (
                 <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 font-semibold text-slate-900 truncate max-w-[200px]">{item.campaña}</td>
+                  <td className="px-4 py-3 font-semibold text-slate-900 truncate max-w-[200px]">{item.nombre}</td>
                   <td className="px-4 py-3 text-right text-slate-600 font-mono">{( (item.abierto / item.entregado) * 100 || 0).toFixed(1)}%</td>
                   <td className="px-4 py-3 text-right text-slate-600 font-mono">{( (item.avanzo / item.abierto) * 100 || 0).toFixed(1)}%</td>
                   <td className="px-4 py-3 text-right text-blue-600 font-bold font-mono">{( (item.matriculado / item.abierto) * 100 || 0).toFixed(2)}%</td>
-                  <td className="px-4 py-3 text-right text-red-600 font-mono">{item["suscripción cancelada"]}</td>
                 </tr>
               ))}
             </tbody>
@@ -521,9 +472,7 @@ const ReportBlock = ({ title, content, icon }: any) => (
       <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400 group-hover:scale-110 transition-transform">{icon}</div>
       <h4 className="font-bold text-slate-100 text-sm uppercase tracking-wide">{title}</h4>
     </div>
-    <p className="text-slate-400 text-xs leading-relaxed text-justify">
-      {content}
-    </p>
+    <p className="text-slate-400 text-xs leading-relaxed text-justify">{content}</p>
   </div>
 );
 
@@ -560,7 +509,7 @@ const StatCard = ({ title, value, subtitle, icon, color }: any) => {
   );
 };
 
-const IconEmail = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v10a2 2 0 002 2z" /></svg>;
+const IconEmail = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 const IconCheck = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
 const IconEye = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>;
 const IconCursor = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" /></svg>;

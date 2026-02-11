@@ -1,6 +1,7 @@
 
 export interface CampaignData {
   campaña: string;
+  nombre: string;
   matriculado: number;
   avanzo: number;
   enviado: number;
