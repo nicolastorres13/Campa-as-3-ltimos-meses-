@@ -18,6 +18,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
   const [subChannelFilter, setSubChannelFilter] = useState<ChannelFilter>('all');
   const [formatChannelFilter, setFormatChannelFilter] = useState<ChannelFilter>('all');
   const [selectedCampaign, setSelectedCampaign] = useState('all');
+  const [selectedSubjectCampaign, setSelectedSubjectCampaign] = useState('all');
 
   const stats = useMemo(() => {
     const s = data.reduce((acc, curr) => ({
@@ -66,6 +67,36 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
       .sort((a, b) => b.apertura - a.apertura)
       .slice(0, 10);
   }, [data, selectedCampaign]);
+
+  // Ranking de Subjects (Asuntos) - Filtrable por campaña
+  const subjectRankings = useMemo(() => {
+    const filteredByCampaign = selectedSubjectCampaign === 'all' 
+      ? data 
+      : data.filter(item => item.campaña === selectedSubjectCampaign);
+
+    const groups: Record<string, { abiertos: number, entregados: number, matriculados: number }> = {};
+    filteredByCampaign.forEach(item => {
+      const subject = item.asunto || 'Sin Asunto';
+      if (subject === 'N/A' || !subject.trim()) return;
+      if (!groups[subject]) groups[subject] = { abiertos: 0, entregados: 0, matriculados: 0 };
+      groups[subject].abiertos += item.abierto;
+      groups[subject].entregados += item.entregado;
+      groups[subject].matriculados += item.matriculado;
+    });
+
+    const allSubjects = Object.entries(groups)
+      .filter(([_, g]) => g.entregados >= 1) 
+      .map(([name, g]) => ({
+        fullName: name,
+        apertura: Number(((g.abiertos / g.entregados) * 100).toFixed(1)) || 0,
+        entregados: g.entregados
+      }));
+
+    const top10 = [...allSubjects].sort((a, b) => b.apertura - a.apertura).slice(0, 10);
+    const bottom10 = [...allSubjects].sort((a, b) => a.apertura - b.apertura).slice(0, 10);
+
+    return { top10, bottom10 };
+  }, [data, selectedSubjectCampaign]);
 
   const funnelProgressData = useMemo(() => {
     const filtered = funnelChannelFilter === 'all' ? data : data.filter(item => item.canal.toLowerCase().includes(funnelChannelFilter.toLowerCase()));
@@ -355,7 +386,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
         </div>
       </div>
 
-      {/* RANKING TOP 10 APERTURA (CON MÉTRICAS ADICIONALES) */}
+      {/* RANKING TOP 10 APERTURA */}
       <div id="section-ranking" className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 w-full relative group/section">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <div>
@@ -384,15 +415,15 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
                 cursor={{fill: '#f8fafc'}} 
                 content={({ active, payload, label }) => {
                   if (active && payload && payload.length) {
-                    const data = payload[0].payload;
+                    const d = payload[0].payload;
                     return (
                       <div className="bg-white p-4 border border-slate-200 shadow-xl rounded-xl text-xs">
                         <p className="font-bold text-slate-900 mb-2">{label}</p>
                         <div className="space-y-1">
-                          <p className="flex justify-between gap-4"><span>Canal:</span> <span className="font-mono font-bold text-blue-600 uppercase">{data.canal}</span></p>
-                          <p className="flex justify-between gap-4"><span>Apertura:</span> <span className="font-mono font-bold">{data.apertura}%</span></p>
-                          <p className="flex justify-between gap-4"><span>Clics:</span> <span className="font-mono font-bold">{data.clics}</span></p>
-                          <p className="flex justify-between gap-4"><span>Matrículas:</span> <span className="font-mono font-bold text-emerald-600">{data.matriculaPerc}%</span></p>
+                          <p className="flex justify-between gap-4"><span>Canal:</span> <span className="font-mono font-bold text-blue-600 uppercase">{d.canal}</span></p>
+                          <p className="flex justify-between gap-4"><span>Apertura:</span> <span className="font-mono font-bold">{d.apertura}%</span></p>
+                          <p className="flex justify-between gap-4"><span>Clics:</span> <span className="font-mono font-bold">{d.clics}</span></p>
+                          <p className="flex justify-between gap-4"><span>Matrículas:</span> <span className="font-mono font-bold text-emerald-600">{d.matriculaPerc}%</span></p>
                         </div>
                       </div>
                     );
@@ -408,6 +439,76 @@ const Dashboard: React.FC<DashboardProps> = ({ data }) => {
               <Line type="monotone" dataKey="matriculaPerc" name="% Matrículas" stroke="#10b981" strokeWidth={3} dot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ANÁLISIS DE RENDIMIENTO POR ASUNTO (LISTA DE TEXTO) */}
+      <div id="section-subjects-analysis" className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 w-full relative group/section">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6">
+          <div>
+            <h3 className="text-xl font-extrabold text-slate-800">Rendimiento por Asunto</h3>
+            <p className="text-xs text-slate-500">Comparativa de efectividad directa por texto de asunto.</p>
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Campaña:</span>
+              <select 
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer min-w-[200px]"
+                value={selectedSubjectCampaign}
+                onChange={(e) => setSelectedSubjectCampaign(e.target.value)}
+              >
+                <option value="all">Todas las Campañas</option>
+                {campaignOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+            </div>
+            <DownloadBtn onClick={() => downloadAsImage('section-subjects-analysis', 'Analisis-Asuntos-Texto')} visible />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+          {/* TOP 10 MEJORES ASUNTOS */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-black text-emerald-600 flex items-center gap-2 uppercase tracking-tighter">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Top 10: Mayor Apertura
+            </h4>
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+              {subjectRankings.top10.length > 0 ? subjectRankings.top10.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 hover:bg-emerald-50 transition-colors group">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <span className="text-[10px] font-black text-emerald-400 w-4">{index + 1}.</span>
+                    <p className="text-xs font-semibold text-slate-700 truncate" title={item.fullName}>{item.fullName}</p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4 shrink-0">
+                    <span className="text-[9px] text-slate-400 font-medium">{item.entregados} envíos</span>
+                    <span className="text-sm font-black text-emerald-600 font-mono">{item.apertura}%</span>
+                  </div>
+                </div>
+              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes.</p>}
+            </div>
+          </div>
+
+          {/* TOP 10 PEORES ASUNTOS */}
+          <div className="space-y-4">
+            <h4 className="text-sm font-black text-red-600 flex items-center gap-2 uppercase tracking-tighter">
+              <span className="w-2 h-2 rounded-full bg-red-500"></span>
+              Top 10: Menor Apertura
+            </h4>
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+              {subjectRankings.bottom10.length > 0 ? subjectRankings.bottom10.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-red-50/50 rounded-xl border border-red-100 hover:bg-red-50 transition-colors">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <span className="text-[10px] font-black text-red-400 w-4">{index + 1}.</span>
+                    <p className="text-xs font-semibold text-slate-700 truncate" title={item.fullName}>{item.fullName}</p>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4 shrink-0">
+                    <span className="text-[9px] text-slate-400 font-medium">{item.entregados} envíos</span>
+                    <span className="text-sm font-black text-red-600 font-mono">{item.apertura}%</span>
+                  </div>
+                </div>
+              )) : <p className="text-xs text-slate-400 italic">No hay datos suficientes.</p>}
+            </div>
+          </div>
         </div>
       </div>
 
